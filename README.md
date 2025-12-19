@@ -55,9 +55,25 @@ The application expects CSV files with:
 
 See `exampleFiles/tuner_log_25-12-18_1501.csv` for a sample file.
 
-## Building a Standalone Executable
+## Building a Portable Executable
 
-To create a standalone `.exe` file that doesn't require Python:
+To create a standalone portable `.exe` file that doesn't require Python or any dependencies:
+
+### Option 1: Using the Build Script (Recommended)
+
+1. Install PyInstaller (if not already installed):
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run the build script:
+   ```bash
+   python build.py
+   ```
+
+3. The portable executable will be created in the `dist/` directory as `ProjectLambdaLiveLogViewer.exe`
+
+### Option 2: Using PyInstaller Directly
 
 1. Install PyInstaller:
    ```bash
@@ -66,10 +82,20 @@ To create a standalone `.exe` file that doesn't require Python:
 
 2. Build the executable:
    ```bash
-   pyinstaller build.spec
+   pyinstaller build.spec --clean --noconfirm
    ```
 
 3. The executable will be in the `dist/` directory
+
+### Distribution
+
+The generated `ProjectLambdaLiveLogViewer.exe` is a **portable standalone executable** that:
+- Requires no Python installation
+- Requires no additional dependencies
+- Can be copied to any Windows 10/11 machine and run directly
+- All dependencies are bundled into the single .exe file
+
+Simply distribute the `.exe` file - no installation required!
 
 ## Project Structure
 
