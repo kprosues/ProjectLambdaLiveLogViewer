@@ -8,6 +8,31 @@ import os
 
 def build_exe():
     """Build the executable using PyInstaller"""
+    # Get the absolute path to the project root (where build.py is located)
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    src_path = os.path.join(project_root, 'src')
+    
+    # Verify the version file exists
+    version_file = os.path.join(src_path, '__version__.py')
+    if not os.path.exists(version_file):
+        print(f"ERROR: Version file not found at: {version_file}")
+        print(f"Project root: {project_root}")
+        print(f"Expected path: {version_file}")
+        sys.exit(1)
+    
+    # Import version module explicitly
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("__version__", version_file)
+    version_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(version_module)
+    
+    VERSION_STRING = version_module.VERSION_STRING
+    APP_NAME = version_module.APP_NAME
+    
+    print("="*60)
+    print(f"Building {APP_NAME}")
+    print(f"Version: {VERSION_STRING}")
+    print("="*60)
     print("Building portable executable...")
     print("This may take a few minutes...")
     

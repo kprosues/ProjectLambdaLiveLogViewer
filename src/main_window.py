@@ -17,6 +17,7 @@ from file_watcher import FileWatcherThread
 from data_display import DataDisplayWidget
 from column_config import ColumnConfigDialog
 from theme import get_theme
+from __version__ import VERSION_STRING, APP_NAME
 
 
 class MainWindow(QMainWindow):
@@ -35,7 +36,7 @@ class MainWindow(QMainWindow):
     
     def _init_ui(self):
         """Initialize the user interface"""
-        self.setWindowTitle("Project Lambda Live Log Viewer")
+        self.setWindowTitle(f"{APP_NAME} v{VERSION_STRING}")
         # Larger default window size for better visibility
         self.setGeometry(100, 100, 1600, 1000)
         

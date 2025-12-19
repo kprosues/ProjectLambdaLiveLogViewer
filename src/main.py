@@ -6,12 +6,13 @@ import sys
 from PyQt6.QtWidgets import QApplication
 from main_window import MainWindow
 from theme import get_theme
+from __version__ import VERSION_STRING, APP_NAME
 
 
 def main():
     """Application entry point"""
     app = QApplication(sys.argv)
-    app.setApplicationName("Project Lambda Live Log Viewer")
+    app.setApplicationName(f"{APP_NAME} v{VERSION_STRING}")
     
     # Initialize and apply theme
     theme = get_theme()
