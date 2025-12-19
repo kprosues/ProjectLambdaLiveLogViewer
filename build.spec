@@ -66,7 +66,7 @@ COMPANY_NAME = version_module.COMPANY_NAME
 COPYRIGHT = version_module.COPYRIGHT
 
 # Generate version info file for Windows executable
-version_info_path = os.path.join(spec_root, 'version_info.txt')
+version_info_path = os.path.abspath(os.path.join(spec_root, 'version_info.txt'))
 version_info_content = f'''# UTF-8
 #
 # For more details about fixed file info 'ffi' see:
@@ -102,6 +102,10 @@ VSVersionInfo(
 '''
 with open(version_info_path, 'w', encoding='utf-8') as f:
     f.write(version_info_content)
+
+# Verify version file was created successfully
+if not os.path.exists(version_info_path):
+    raise FileNotFoundError(f"Failed to create version info file at: {version_info_path}")
 
 a = Analysis(
     ['src/main.py'],
@@ -145,7 +149,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='ProjectLambdaLiveLogViewer',
+    name=f'ProjectLambdaLiveLogViewer-{VERSION_STRING}',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
