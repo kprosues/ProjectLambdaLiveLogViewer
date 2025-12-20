@@ -3,7 +3,6 @@ File watcher for monitoring CSV log files
 Uses watchdog to detect file changes and efficiently tail new lines
 """
 import os
-import time
 from pathlib import Path
 from typing import Optional
 from PyQt6.QtCore import QThread, pyqtSignal
@@ -19,6 +18,7 @@ class CSVFileWatcher(FileSystemEventHandler):
         self.file_path = Path(file_path)
         self.new_line_signal = new_line_signal
         self.last_position = 0
+        self.last_known_size = 0  # Cache file size to avoid unnecessary stat() calls
         self._read_initial_position()
     
     def _read_initial_position(self):
@@ -31,6 +31,7 @@ class CSVFileWatcher(FileSystemEventHandler):
                     # Read to find the last complete line
                     f.seek(0, 2)  # Seek to end
                     file_size = f.tell()
+                    self.last_known_size = file_size  # Cache file size
                     if file_size == 0:
                         self.last_position = 0
                         return
@@ -55,7 +56,9 @@ class CSVFileWatcher(FileSystemEventHandler):
                             self.last_position = max(0, file_size - chunk_size)
             except Exception:
                 # Fallback to simple size if there's an error
-                self.last_position = self.file_path.stat().st_size
+                file_size = self.file_path.stat().st_size
+                self.last_known_size = file_size
+                self.last_position = file_size
     
     def on_modified(self, event):
         """Handle file modification events"""
@@ -66,6 +69,7 @@ class CSVFileWatcher(FileSystemEventHandler):
         """Handle file creation events (for file rotation)"""
         if not event.is_directory and Path(event.src_path) == self.file_path:
             self.last_position = 0
+            self.last_known_size = 0  # Reset cached size for new file
             self._read_new_lines()
     
     def _read_new_lines(self):
@@ -74,7 +78,14 @@ class CSVFileWatcher(FileSystemEventHandler):
             if not self.file_path.exists():
                 return
             
+            # Check file size first - avoid opening file if nothing changed
             current_size = self.file_path.stat().st_size
+            
+            # Skip if file size hasn't changed (optimization for polling)
+            if current_size == self.last_known_size:
+                return
+            
+            self.last_known_size = current_size
             
             # Handle file truncation/rotation
             if current_size < self.last_position:
@@ -87,33 +98,36 @@ class CSVFileWatcher(FileSystemEventHandler):
                     new_data_bytes = f.read(current_size - self.last_position)
                     
                     if new_data_bytes:
-                        # Decode to string
-                        try:
-                            new_data = new_data_bytes.decode('utf-8', errors='ignore')
-                        except Exception:
-                            return
+                        # Process bytes directly to find line boundaries
+                        # This avoids decode/rejoin/re-encode overhead
+                        start_idx = 0
+                        bytes_processed = 0
                         
-                        # Split into lines
-                        lines = new_data.split('\n')
-                        
-                        # Process all complete lines (all but potentially the last one)
-                        # The last element will be empty if data ends with newline, or contain partial line if not
-                        num_complete_lines = len(lines) - 1
-                        
-                        if num_complete_lines > 0:
-                            for i in range(num_complete_lines):
-                                line = lines[i].strip()
+                        while True:
+                            # Find next newline in bytes
+                            newline_idx = new_data_bytes.find(b'\n', start_idx)
+                            
+                            if newline_idx == -1:
+                                # No more complete lines, partial line remains
+                                break
+                            
+                            # Extract line bytes (from start_idx to newline_idx, inclusive)
+                            line_bytes = new_data_bytes[start_idx:newline_idx]
+                            
+                            # Decode only this line
+                            try:
+                                line = line_bytes.decode('utf-8', errors='ignore').strip()
                                 if line:  # Skip empty lines
                                     self.new_line_signal.emit(line)
+                            except Exception:
+                                pass  # Skip lines that can't be decoded
                             
-                            # Calculate position after complete lines
-                            # Count bytes for complete lines including their newlines
-                            complete_text = '\n'.join(lines[:num_complete_lines])
-                            if complete_text:  # Only add newline if there was data
-                                complete_text += '\n'
-                            # Get byte length of complete lines
-                            complete_bytes = complete_text.encode('utf-8')
-                            self.last_position += len(complete_bytes)
+                            # Update position: line bytes + newline byte
+                            bytes_processed += len(line_bytes) + 1
+                            start_idx = newline_idx + 1
+                        
+                        # Update last_position with bytes we've processed
+                        self.last_position += bytes_processed
                         # If there's a partial last line, position stays at start of that line
                         # It will be read when the line is completed (next time file grows)
         except Exception as e:

@@ -231,7 +231,7 @@ class MainWindow(QMainWindow):
             self._stop_watching()
     
     def _read_existing_data(self):
-        """Read the last complete line of the file to display initial data (without tracking for averages)"""
+        """Read the last complete line of the file to display initial data"""
         if not self.parser or not self.current_file:
             return
         
@@ -266,9 +266,8 @@ class MainWindow(QMainWindow):
                         if line:
                             data = self.parser.parse_row(line)
                             if data:
-                                # Display the last complete row but don't track values for average calculation
-                                # Only values observed while tailing will be used for averages
-                                self.data_display.update_data(data, update_display=True, track_values=False)
+                                # Display the last complete row
+                                self.data_display.update_data(data, update_display=True)
                                 break
         except Exception as e:
             print(f"Error reading existing data: {e}")

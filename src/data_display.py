@@ -2,8 +2,7 @@
 Live data display widget
 Shows the latest row of data with column names, values, and units
 """
-from typing import Dict, Optional, List
-from collections import defaultdict
+from typing import Dict, Optional
 import random
 import colorsys
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout
@@ -23,8 +22,8 @@ class DataDisplayWidget(QWidget):
         self.current_data: Optional[Dict[str, str]] = None
         self.visible_columns: set = set()
         self.column_info: list = []
-        # Track all observed values for each column to calculate averages
-        self.observed_values: Dict[str, List[float]] = defaultdict(list)
+        # Track maximum absolute value for each column (efficient - only stores max, not all values)
+        self.maximum_values: Dict[str, float] = {}
         # Store random color for each column (by row)
         self.column_colors: Dict[str, str] = {}
         # Font sizes (in points)
@@ -35,7 +34,6 @@ class DataDisplayWidget(QWidget):
         # Store widget references to avoid recreating them
         self.name_labels: Dict[str, QLabel] = {}
         self.value_labels: Dict[str, QLabel] = {}
-        self.average_labels: Dict[str, QLabel] = {}
         self.maximum_labels: Dict[str, QLabel] = {}
         self.header_labels: Dict[str, QLabel] = {}
         self.no_data_label: Optional[QLabel] = None
@@ -61,8 +59,7 @@ class DataDisplayWidget(QWidget):
         self.grid_layout = QGridLayout(self.data_container)
         self.grid_layout.setColumnStretch(0, 2)  # Column name - less space
         self.grid_layout.setColumnStretch(1, 3)  # Current value - more space for large numbers
-        self.grid_layout.setColumnStretch(2, 3)  # Average value - more space for large numbers
-        self.grid_layout.setColumnStretch(3, 3)  # Maximum value - more space for large numbers
+        self.grid_layout.setColumnStretch(2, 3)  # Maximum value - more space for large numbers
         self.grid_layout.setSpacing(5)  # Reduced spacing between rows
         
         scroll.setWidget(self.data_container)
@@ -92,7 +89,7 @@ class DataDisplayWidget(QWidget):
                 self.no_data_label.setStyleSheet(f"color: {secondary_color}; font-size: 18pt; padding: 50px;")
             else:
                 self.no_data_label.setStyleSheet("color: gray; font-size: 18pt; padding: 50px;")
-            self.grid_layout.addWidget(self.no_data_label, 0, 0, 1, 4)
+            self.grid_layout.addWidget(self.no_data_label, 0, 0, 1, 3)
         else:
             self.no_data_label.show()
     
@@ -103,8 +100,6 @@ class DataDisplayWidget(QWidget):
         for label in self.name_labels.values():
             label.hide()
         for label in self.value_labels.values():
-            label.hide()
-        for label in self.average_labels.values():
             label.hide()
         for label in self.maximum_labels.values():
             label.hide()
@@ -123,7 +118,6 @@ class DataDisplayWidget(QWidget):
         # Clear references
         self.name_labels.clear()
         self.value_labels.clear()
-        self.average_labels.clear()
         self.maximum_labels.clear()
         self.header_labels.clear()
         self.no_data_label = None
@@ -136,8 +130,8 @@ class DataDisplayWidget(QWidget):
             column_info: List of (column_name, unit) tuples
         """
         self.column_info = column_info
-        # Reset observed values when column info changes (new file loaded)
-        self.observed_values.clear()
+        # Reset maximum values when column info changes (new file loaded)
+        self.maximum_values.clear()
         # Reset column colors when column info changes
         self.column_colors.clear()
         self.update_display()
@@ -152,39 +146,29 @@ class DataDisplayWidget(QWidget):
         self.visible_columns = {name for name, visible in visible_columns.items() if visible}
         self.update_display()
     
-    def update_data(self, data: Dict[str, str], update_display: bool = True, track_values: bool = True):
+    def update_data(self, data: Dict[str, str], update_display: bool = True):
         """
         Update the displayed data
         
         Args:
             data: Dictionary mapping column names to values
             update_display: Whether to update the display immediately (default: True)
-            track_values: Whether to track values for average calculation (default: True)
         """
         self.current_data = data
         
-        # Track observed values for average calculation only if requested
-        if track_values:
-            self._track_observed_values(data)
-        
-        if update_display:
-            self.update_display()
-    
-    def _track_observed_values(self, data: Dict[str, str]):
-        """
-        Track observed values for average calculation without updating display
-        
-        Args:
-            data: Dictionary mapping column names to values
-        """
+        # Update maximum values efficiently (only track max, not all values)
         for column_name, value_str in data.items():
             try:
-                # Try to convert to float for numeric columns
                 value = float(value_str)
-                self.observed_values[column_name].append(value)
+                abs_value = abs(value)
+                if column_name not in self.maximum_values or abs_value > abs(self.maximum_values[column_name]):
+                    self.maximum_values[column_name] = value
             except (ValueError, TypeError):
                 # Skip non-numeric values
                 pass
+        
+        if update_display:
+            self.update_display()
     
     def update_display(self):
         """Update the display with current data and visibility settings"""
@@ -218,20 +202,11 @@ class DataDisplayWidget(QWidget):
         else:
             self.header_labels['current_header'].show()
         
-        if 'average_header' not in self.header_labels:
-            average_header = QLabel("Average")
-            average_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            average_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
-            self.grid_layout.addWidget(average_header, row, 2)
-            self.header_labels['average_header'] = average_header
-        else:
-            self.header_labels['average_header'].show()
-        
         if 'maximum_header' not in self.header_labels:
             maximum_header = QLabel("Maximum")
             maximum_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
             maximum_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
-            self.grid_layout.addWidget(maximum_header, row, 3)
+            self.grid_layout.addWidget(maximum_header, row, 2)
             self.header_labels['maximum_header'] = maximum_header
         else:
             self.header_labels['maximum_header'].show()
@@ -283,28 +258,13 @@ class DataDisplayWidget(QWidget):
                     self.value_labels[column_name].setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
                     self.value_labels[column_name].show()
                 
-                # Update or create average label
-                average_value = self._calculate_average(column_name)
-                if column_name not in self.average_labels:
-                    average_label = QLabel(average_value)
-                    average_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    average_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
-                    self.grid_layout.addWidget(average_label, row, 2)
-                    self.average_labels[column_name] = average_label
-                else:
-                    # Update average value
-                    self.average_labels[column_name].setText(average_value)
-                    # Update color
-                    self.average_labels[column_name].setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
-                    self.average_labels[column_name].show()
-                
                 # Update or create maximum label
                 maximum_value = self._calculate_maximum(column_name)
                 if column_name not in self.maximum_labels:
                     maximum_label = QLabel(maximum_value)
                     maximum_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                     maximum_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
-                    self.grid_layout.addWidget(maximum_label, row, 3)
+                    self.grid_layout.addWidget(maximum_label, row, 2)
                     self.maximum_labels[column_name] = maximum_label
                 else:
                     # Update maximum value
@@ -321,33 +281,13 @@ class DataDisplayWidget(QWidget):
                 self.name_labels[column_name].hide()
                 if column_name in self.value_labels:
                     self.value_labels[column_name].hide()
-                if column_name in self.average_labels:
-                    self.average_labels[column_name].hide()
                 if column_name in self.maximum_labels:
                     self.maximum_labels[column_name].hide()
     
-    def _calculate_average(self, column_name: str) -> str:
-        """
-        Calculate average for a column based on observed values
-        
-        Args:
-            column_name: Name of the column
-            
-        Returns:
-            Average value as string, or "N/A" if no data
-        """
-        values = self.observed_values.get(column_name, [])
-        if not values:
-            return "N/A"
-        
-        average = sum(values) / len(values)
-        # Format with reasonable precision
-        return f"{average:.2f}"
-    
     def _calculate_maximum(self, column_name: str) -> str:
         """
-        Calculate absolute maximum for a column based on observed values
-        Returns the value with the largest absolute value (either positive or negative)
+        Get the maximum absolute value for a column
+        Returns the value with the largest absolute value (either positive or negative) seen so far
         
         Args:
             column_name: Name of the column
@@ -355,14 +295,12 @@ class DataDisplayWidget(QWidget):
         Returns:
             Maximum absolute value as string, or "N/A" if no data
         """
-        values = self.observed_values.get(column_name, [])
-        if not values:
+        if column_name not in self.maximum_values:
             return "N/A"
         
-        # Find the value with the maximum absolute value
-        max_abs_value = max(values, key=abs)
+        max_value = self.maximum_values[column_name]
         # Format with reasonable precision
-        return f"{max_abs_value:.2f}"
+        return f"{max_value:.2f}"
     
     def _get_column_color(self, column_name: str) -> str:
         """
