@@ -2,7 +2,7 @@
 Version information for Project Lambda Live Log Viewer
 Uses semantic versioning: MAJOR.MINOR.PATCH
 """
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __version_info__ = tuple(map(int, __version__.split('.')))
 
 # Version metadata for Windows executable

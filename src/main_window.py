@@ -203,7 +203,11 @@ class MainWindow(QMainWindow):
             success_color = self.theme.get_color('status_success')
             self.file_label.setStyleSheet(f"color: {success_color}; padding: 5px; font-weight: bold;")
             
-            # Start file watcher
+            # Read existing data BEFORE starting watcher to ensure we display latest values
+            # This must happen before watcher starts, as watcher will set position to end of file
+            self._read_existing_data()
+            
+            # Start file watcher (will set position to end of file to only read new lines)
             self.watcher_thread = FileWatcherThread(file_path)
             self.watcher_thread.new_line.connect(self._on_new_line)
             self.watcher_thread.start()
@@ -214,29 +218,50 @@ class MainWindow(QMainWindow):
             self.column_visibility_action.setEnabled(True)
             self.statusBar().showMessage(f"Watching: {file_name}")
             
-            # Read existing data if file has content
-            self._read_existing_data()
-            
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Failed to load file: {str(e)}")
             self._stop_watching()
     
     def _read_existing_data(self):
-        """Read the last line of the file to display initial data (without tracking for averages)"""
+        """Read the last complete line of the file to display initial data (without tracking for averages)"""
         if not self.parser or not self.current_file:
             return
         
         try:
-            with open(self.current_file, 'r', encoding='utf-8') as f:
-                lines = f.readlines()
+            with open(self.current_file, 'rb') as f:
+                # Read file in binary mode to check if it ends with newline
+                f.seek(0, 2)  # Seek to end
+                file_size = f.tell()
+                if file_size == 0:
+                    return
+                
+                # Check if file ends with newline
+                f.seek(max(0, file_size - 1))
+                last_char = f.read(1)
+                ends_with_newline = (last_char == b'\n')
+                
+                # Read all lines
+                f.seek(0)
+                content = f.read().decode('utf-8', errors='ignore')
+                lines = content.split('\n')
+                
                 if len(lines) > 1:  # Has header + at least one data row
-                    last_line = lines[-1].strip()
-                    if last_line:
-                        data = self.parser.parse_row(last_line)
-                        if data:
-                            # Display the last row but don't track values for average calculation
-                            # Only values observed while tailing will be used for averages
-                            self.data_display.update_data(data, update_display=True, track_values=False)
+                    # If file ends with newline, last line in split will be empty, so use second-to-last
+                    # Otherwise, last line might be incomplete, so use second-to-last
+                    line_index = len(lines) - 2 if ends_with_newline else len(lines) - 2
+                    if line_index < 1:
+                        line_index = len(lines) - 1  # Fallback to last line
+                    
+                    # Try lines from the end backwards until we find a valid one
+                    for i in range(line_index, 0, -1):  # Start from candidate, go backwards to header
+                        line = lines[i].strip()
+                        if line:
+                            data = self.parser.parse_row(line)
+                            if data:
+                                # Display the last complete row but don't track values for average calculation
+                                # Only values observed while tailing will be used for averages
+                                self.data_display.update_data(data, update_display=True, track_values=False)
+                                break
         except Exception as e:
             print(f"Error reading existing data: {e}")
     

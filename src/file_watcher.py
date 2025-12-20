@@ -24,7 +24,38 @@ class CSVFileWatcher(FileSystemEventHandler):
     def _read_initial_position(self):
         """Set initial position to end of file to only read new lines"""
         if self.file_path.exists():
-            self.last_position = self.file_path.stat().st_size
+            # Read to the last complete line, not just the end of file
+            # This ensures we don't miss data if a line is being written
+            try:
+                with open(self.file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    # Read to find the last complete line
+                    f.seek(0, 2)  # Seek to end
+                    file_size = f.tell()
+                    if file_size == 0:
+                        self.last_position = 0
+                        return
+                    
+                    # Read backwards to find the last newline
+                    chunk_size = min(1024, file_size)
+                    f.seek(max(0, file_size - chunk_size))
+                    chunk = f.read(chunk_size)
+                    last_newline = chunk.rfind('\n')
+                    
+                    if last_newline >= 0:
+                        # Found a newline, position is after it
+                        self.last_position = file_size - chunk_size + last_newline + 1
+                    else:
+                        # No newline found in chunk, check if file ends with newline
+                        f.seek(max(0, file_size - 1))
+                        last_char = f.read(1)
+                        if last_char == '\n':
+                            self.last_position = file_size
+                        else:
+                            # Incomplete line, start from beginning of chunk
+                            self.last_position = max(0, file_size - chunk_size)
+            except Exception:
+                # Fallback to simple size if there's an error
+                self.last_position = self.file_path.stat().st_size
     
     def on_modified(self, event):
         """Handle file modification events"""
@@ -50,17 +81,41 @@ class CSVFileWatcher(FileSystemEventHandler):
                 self.last_position = 0
             
             if current_size > self.last_position:
-                with open(self.file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                with open(self.file_path, 'rb') as f:  # Open in binary mode for accurate position tracking
                     f.seek(self.last_position)
-                    new_lines = f.readlines()
+                    # Read all new data as bytes
+                    new_data_bytes = f.read(current_size - self.last_position)
                     
-                    # Process each new line
-                    for line in new_lines:
-                        line = line.strip()
-                        if line:  # Skip empty lines
-                            self.new_line_signal.emit(line)
-                    
-                    self.last_position = f.tell()
+                    if new_data_bytes:
+                        # Decode to string
+                        try:
+                            new_data = new_data_bytes.decode('utf-8', errors='ignore')
+                        except Exception:
+                            return
+                        
+                        # Split into lines
+                        lines = new_data.split('\n')
+                        
+                        # Process all complete lines (all but potentially the last one)
+                        # The last element will be empty if data ends with newline, or contain partial line if not
+                        num_complete_lines = len(lines) - 1
+                        
+                        if num_complete_lines > 0:
+                            for i in range(num_complete_lines):
+                                line = lines[i].strip()
+                                if line:  # Skip empty lines
+                                    self.new_line_signal.emit(line)
+                            
+                            # Calculate position after complete lines
+                            # Count bytes for complete lines including their newlines
+                            complete_text = '\n'.join(lines[:num_complete_lines])
+                            if complete_text:  # Only add newline if there was data
+                                complete_text += '\n'
+                            # Get byte length of complete lines
+                            complete_bytes = complete_text.encode('utf-8')
+                            self.last_position += len(complete_bytes)
+                        # If there's a partial last line, position stays at start of that line
+                        # It will be read when the line is completed (next time file grows)
         except Exception as e:
             print(f"Error reading file: {e}")
 

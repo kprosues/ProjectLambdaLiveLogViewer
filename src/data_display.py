@@ -28,6 +28,12 @@ class DataDisplayWidget(QWidget):
         self.value_font_size = 100
         self.header_font_size = 34
         self.theme = None
+        # Store widget references to avoid recreating them
+        self.name_labels: Dict[str, QLabel] = {}
+        self.value_labels: Dict[str, QLabel] = {}
+        self.average_labels: Dict[str, QLabel] = {}
+        self.header_labels: Dict[str, QLabel] = {}
+        self.no_data_label: Optional[QLabel] = None
         self._init_ui()
     
     def _init_ui(self):
@@ -69,22 +75,47 @@ class DataDisplayWidget(QWidget):
     
     def _show_no_data_message(self):
         """Show message when no data is available"""
-        self._clear_display()
-        label = QLabel("No data available. Select a log file to begin.")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        if self.theme:
-            secondary_color = self.theme.get_color('label_secondary')
-            label.setStyleSheet(f"color: {secondary_color}; font-size: 18pt; padding: 50px;")
+        self._hide_all_data_widgets()
+        if self.no_data_label is None:
+            self.no_data_label = QLabel("No data available. Select a log file to begin.")
+            self.no_data_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if self.theme:
+                secondary_color = self.theme.get_color('label_secondary')
+                self.no_data_label.setStyleSheet(f"color: {secondary_color}; font-size: 18pt; padding: 50px;")
+            else:
+                self.no_data_label.setStyleSheet("color: gray; font-size: 18pt; padding: 50px;")
+            self.grid_layout.addWidget(self.no_data_label, 0, 0, 1, 3)
         else:
-            label.setStyleSheet("color: gray; font-size: 18pt; padding: 50px;")
-        self.grid_layout.addWidget(label, 0, 0, 1, 3)
+            self.no_data_label.show()
+    
+    def _hide_all_data_widgets(self):
+        """Hide all data widgets"""
+        if self.no_data_label:
+            self.no_data_label.hide()
+        for label in self.name_labels.values():
+            label.hide()
+        for label in self.value_labels.values():
+            label.hide()
+        for label in self.average_labels.values():
+            label.hide()
+        for label in self.header_labels.values():
+            label.hide()
     
     def _clear_display(self):
-        """Clear all widgets from the display"""
+        """Clear all widgets from the display (used when structure changes)"""
+        # Hide all widgets
+        self._hide_all_data_widgets()
+        # Remove from layout
         while self.grid_layout.count():
             child = self.grid_layout.takeAt(0)
             if child.widget():
                 child.widget().deleteLater()
+        # Clear references
+        self.name_labels.clear()
+        self.value_labels.clear()
+        self.average_labels.clear()
+        self.header_labels.clear()
+        self.no_data_label = None
     
     def set_column_info(self, column_info: list):
         """
@@ -144,33 +175,54 @@ class DataDisplayWidget(QWidget):
     
     def update_display(self):
         """Update the display with current data and visibility settings"""
-        self._clear_display()
-        
         if not self.current_data or not self.column_info:
             self._show_no_data_message()
             return
         
+        # Hide no data message if showing
+        if self.no_data_label:
+            self.no_data_label.hide()
+        
         row = 0
         
-        # Add header row for current and average values
+        # Create or update header row
         header_text_color = self.theme.get_color('header_text') if self.theme else '#000000'
-        name_header = QLabel("Parameter")
-        name_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
-        current_header = QLabel("Current")
-        current_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        current_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
-        average_header = QLabel("Average")
-        average_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        average_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
         
-        self.grid_layout.addWidget(name_header, row, 0)
-        self.grid_layout.addWidget(current_header, row, 1)
-        self.grid_layout.addWidget(average_header, row, 2)
+        if 'name_header' not in self.header_labels:
+            name_header = QLabel("Parameter")
+            name_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
+            self.grid_layout.addWidget(name_header, row, 0)
+            self.header_labels['name_header'] = name_header
+        else:
+            self.header_labels['name_header'].show()
+        
+        if 'current_header' not in self.header_labels:
+            current_header = QLabel("Current")
+            current_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            current_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
+            self.grid_layout.addWidget(current_header, row, 1)
+            self.header_labels['current_header'] = current_header
+        else:
+            self.header_labels['current_header'].show()
+        
+        if 'average_header' not in self.header_labels:
+            average_header = QLabel("Average")
+            average_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            average_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
+            self.grid_layout.addWidget(average_header, row, 2)
+            self.header_labels['average_header'] = average_header
+        else:
+            self.header_labels['average_header'].show()
+        
         row += 1
         
-        # Add data rows for visible columns
+        # Track which columns we've processed
+        processed_columns = set()
+        
+        # Update or create data rows for visible columns
         for column_name, unit in self.column_info:
             if column_name in self.visible_columns:
+                processed_columns.add(column_name)
                 value = self.current_data.get(column_name, "N/A")
                 
                 # Format column label
@@ -179,30 +231,58 @@ class DataDisplayWidget(QWidget):
                 else:
                     label_text = column_name
                 
-                label_text_color = self.theme.get_color('label_text') if self.theme else '#000000'
-                name_label = QLabel(label_text)
-                name_label.setStyleSheet(f"font-size: {self.title_font_size}pt; padding: 2px; color: {label_text_color};")
+                # Update or create name label
+                if column_name not in self.name_labels:
+                    label_text_color = self.theme.get_color('label_text') if self.theme else '#000000'
+                    name_label = QLabel(label_text)
+                    name_label.setStyleSheet(f"font-size: {self.title_font_size}pt; padding: 2px; color: {label_text_color};")
+                    self.grid_layout.addWidget(name_label, row, 0)
+                    self.name_labels[column_name] = name_label
+                else:
+                    # Update text if unit changed
+                    self.name_labels[column_name].setText(label_text)
+                    self.name_labels[column_name].show()
                 
-                value_label = QLabel(str(value))
-                value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                # Use very large font for values - easy to read at a glance
-                normal_color = self.theme.get_color('value_normal') if self.theme else '#000000'
-                value_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {normal_color};")
+                # Update or create value label
+                if column_name not in self.value_labels:
+                    value_label = QLabel(str(value))
+                    value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    normal_color = self.theme.get_color('value_normal') if self.theme else '#000000'
+                    value_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {normal_color};")
+                    self.grid_layout.addWidget(value_label, row, 1)
+                    self.value_labels[column_name] = value_label
+                else:
+                    # Update value text
+                    self.value_labels[column_name].setText(str(value))
+                    self.value_labels[column_name].show()
                 
                 # Apply color coding for certain parameters
-                self._apply_color_coding(column_name, value, value_label)
+                self._apply_color_coding(column_name, value, self.value_labels[column_name])
                 
-                # Calculate and display average
+                # Update or create average label
                 average_value = self._calculate_average(column_name)
-                average_label = QLabel(average_value)
-                average_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                average_color = self.theme.get_color('value_average') if self.theme else '#0000FF'
-                average_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {average_color};")
+                if column_name not in self.average_labels:
+                    average_label = QLabel(average_value)
+                    average_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    average_color = self.theme.get_color('value_average') if self.theme else '#0000FF'
+                    average_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {average_color};")
+                    self.grid_layout.addWidget(average_label, row, 2)
+                    self.average_labels[column_name] = average_label
+                else:
+                    # Update average value
+                    self.average_labels[column_name].setText(average_value)
+                    self.average_labels[column_name].show()
                 
-                self.grid_layout.addWidget(name_label, row, 0)
-                self.grid_layout.addWidget(value_label, row, 1)
-                self.grid_layout.addWidget(average_label, row, 2)
                 row += 1
+        
+        # Hide columns that are no longer visible
+        for column_name in list(self.name_labels.keys()):
+            if column_name not in processed_columns:
+                self.name_labels[column_name].hide()
+                if column_name in self.value_labels:
+                    self.value_labels[column_name].hide()
+                if column_name in self.average_labels:
+                    self.average_labels[column_name].hide()
     
     def _calculate_average(self, column_name: str) -> str:
         """
