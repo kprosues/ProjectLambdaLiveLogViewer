@@ -4,6 +4,8 @@ Shows the latest row of data with column names, values, and units
 """
 from typing import Dict, Optional, List
 from collections import defaultdict
+import random
+import colorsys
 from PyQt6.QtWidgets import QWidget, QVBoxLayout, QLabel, QScrollArea, QGridLayout
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont, QColor, QPalette
@@ -23,6 +25,8 @@ class DataDisplayWidget(QWidget):
         self.column_info: list = []
         # Track all observed values for each column to calculate averages
         self.observed_values: Dict[str, List[float]] = defaultdict(list)
+        # Store random color for each column (by row)
+        self.column_colors: Dict[str, str] = {}
         # Font sizes (in points)
         self.title_font_size = 60
         self.value_font_size = 100
@@ -32,6 +36,7 @@ class DataDisplayWidget(QWidget):
         self.name_labels: Dict[str, QLabel] = {}
         self.value_labels: Dict[str, QLabel] = {}
         self.average_labels: Dict[str, QLabel] = {}
+        self.maximum_labels: Dict[str, QLabel] = {}
         self.header_labels: Dict[str, QLabel] = {}
         self.no_data_label: Optional[QLabel] = None
         self._init_ui()
@@ -57,6 +62,7 @@ class DataDisplayWidget(QWidget):
         self.grid_layout.setColumnStretch(0, 2)  # Column name - less space
         self.grid_layout.setColumnStretch(1, 3)  # Current value - more space for large numbers
         self.grid_layout.setColumnStretch(2, 3)  # Average value - more space for large numbers
+        self.grid_layout.setColumnStretch(3, 3)  # Maximum value - more space for large numbers
         self.grid_layout.setSpacing(5)  # Reduced spacing between rows
         
         scroll.setWidget(self.data_container)
@@ -68,6 +74,8 @@ class DataDisplayWidget(QWidget):
     def apply_theme(self, theme: 'Theme'):
         """Apply theme to this widget"""
         self.theme = theme
+        # Regenerate colors when theme changes to ensure they work with the new theme
+        self.column_colors.clear()
         if hasattr(self, 'title_label') and self.title_label:
             title_color = theme.get_color('label_text')
             self.title_label.setStyleSheet(f"font-weight: bold; font-size: 18pt; margin-bottom: 15px; color: {title_color};")
@@ -84,7 +92,7 @@ class DataDisplayWidget(QWidget):
                 self.no_data_label.setStyleSheet(f"color: {secondary_color}; font-size: 18pt; padding: 50px;")
             else:
                 self.no_data_label.setStyleSheet("color: gray; font-size: 18pt; padding: 50px;")
-            self.grid_layout.addWidget(self.no_data_label, 0, 0, 1, 3)
+            self.grid_layout.addWidget(self.no_data_label, 0, 0, 1, 4)
         else:
             self.no_data_label.show()
     
@@ -97,6 +105,8 @@ class DataDisplayWidget(QWidget):
         for label in self.value_labels.values():
             label.hide()
         for label in self.average_labels.values():
+            label.hide()
+        for label in self.maximum_labels.values():
             label.hide()
         for label in self.header_labels.values():
             label.hide()
@@ -114,6 +124,7 @@ class DataDisplayWidget(QWidget):
         self.name_labels.clear()
         self.value_labels.clear()
         self.average_labels.clear()
+        self.maximum_labels.clear()
         self.header_labels.clear()
         self.no_data_label = None
     
@@ -127,6 +138,8 @@ class DataDisplayWidget(QWidget):
         self.column_info = column_info
         # Reset observed values when column info changes (new file loaded)
         self.observed_values.clear()
+        # Reset column colors when column info changes
+        self.column_colors.clear()
         self.update_display()
     
     def set_visible_columns(self, visible_columns: Dict[str, bool]):
@@ -214,6 +227,15 @@ class DataDisplayWidget(QWidget):
         else:
             self.header_labels['average_header'].show()
         
+        if 'maximum_header' not in self.header_labels:
+            maximum_header = QLabel("Maximum")
+            maximum_header.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            maximum_header.setStyleSheet(f"font-size: {self.header_font_size}pt; padding: 2px; font-weight: bold; color: {header_text_color};")
+            self.grid_layout.addWidget(maximum_header, row, 3)
+            self.header_labels['maximum_header'] = maximum_header
+        else:
+            self.header_labels['maximum_header'].show()
+        
         row += 1
         
         # Track which columns we've processed
@@ -231,47 +253,65 @@ class DataDisplayWidget(QWidget):
                 else:
                     label_text = column_name
                 
+                # Get or generate color for this column (row)
+                row_color = self._get_column_color(column_name)
+                
                 # Update or create name label
                 if column_name not in self.name_labels:
-                    label_text_color = self.theme.get_color('label_text') if self.theme else '#000000'
                     name_label = QLabel(label_text)
-                    name_label.setStyleSheet(f"font-size: {self.title_font_size}pt; padding: 2px; color: {label_text_color};")
+                    name_label.setStyleSheet(f"font-size: {self.title_font_size}pt; padding: 2px; color: {row_color};")
                     self.grid_layout.addWidget(name_label, row, 0)
                     self.name_labels[column_name] = name_label
                 else:
                     # Update text if unit changed
                     self.name_labels[column_name].setText(label_text)
+                    # Update color
+                    self.name_labels[column_name].setStyleSheet(f"font-size: {self.title_font_size}pt; padding: 2px; color: {row_color};")
                     self.name_labels[column_name].show()
                 
                 # Update or create value label
                 if column_name not in self.value_labels:
                     value_label = QLabel(str(value))
                     value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    normal_color = self.theme.get_color('value_normal') if self.theme else '#000000'
-                    value_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {normal_color};")
+                    value_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
                     self.grid_layout.addWidget(value_label, row, 1)
                     self.value_labels[column_name] = value_label
                 else:
                     # Update value text
                     self.value_labels[column_name].setText(str(value))
+                    # Update color
+                    self.value_labels[column_name].setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
                     self.value_labels[column_name].show()
-                
-                # Apply color coding for certain parameters
-                self._apply_color_coding(column_name, value, self.value_labels[column_name])
                 
                 # Update or create average label
                 average_value = self._calculate_average(column_name)
                 if column_name not in self.average_labels:
                     average_label = QLabel(average_value)
                     average_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                    average_color = self.theme.get_color('value_average') if self.theme else '#0000FF'
-                    average_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {average_color};")
+                    average_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
                     self.grid_layout.addWidget(average_label, row, 2)
                     self.average_labels[column_name] = average_label
                 else:
                     # Update average value
                     self.average_labels[column_name].setText(average_value)
+                    # Update color
+                    self.average_labels[column_name].setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
                     self.average_labels[column_name].show()
+                
+                # Update or create maximum label
+                maximum_value = self._calculate_maximum(column_name)
+                if column_name not in self.maximum_labels:
+                    maximum_label = QLabel(maximum_value)
+                    maximum_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                    maximum_label.setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
+                    self.grid_layout.addWidget(maximum_label, row, 3)
+                    self.maximum_labels[column_name] = maximum_label
+                else:
+                    # Update maximum value
+                    self.maximum_labels[column_name].setText(maximum_value)
+                    # Update color
+                    self.maximum_labels[column_name].setStyleSheet(f"font-size: {self.value_font_size}pt; padding: 2px; font-weight: bold; color: {row_color};")
+                    self.maximum_labels[column_name].show()
                 
                 row += 1
         
@@ -283,6 +323,8 @@ class DataDisplayWidget(QWidget):
                     self.value_labels[column_name].hide()
                 if column_name in self.average_labels:
                     self.average_labels[column_name].hide()
+                if column_name in self.maximum_labels:
+                    self.maximum_labels[column_name].hide()
     
     def _calculate_average(self, column_name: str) -> str:
         """
@@ -301,6 +343,63 @@ class DataDisplayWidget(QWidget):
         average = sum(values) / len(values)
         # Format with reasonable precision
         return f"{average:.2f}"
+    
+    def _calculate_maximum(self, column_name: str) -> str:
+        """
+        Calculate absolute maximum for a column based on observed values
+        Returns the value with the largest absolute value (either positive or negative)
+        
+        Args:
+            column_name: Name of the column
+            
+        Returns:
+            Maximum absolute value as string, or "N/A" if no data
+        """
+        values = self.observed_values.get(column_name, [])
+        if not values:
+            return "N/A"
+        
+        # Find the value with the maximum absolute value
+        max_abs_value = max(values, key=abs)
+        # Format with reasonable precision
+        return f"{max_abs_value:.2f}"
+    
+    def _get_column_color(self, column_name: str) -> str:
+        """
+        Get or generate a random color for a column (row).
+        Colors are consistent per column and work well in both light and dark modes.
+        
+        Args:
+            column_name: Name of the column
+            
+        Returns:
+            Hex color string (e.g., '#FF5733')
+        """
+        if column_name not in self.column_colors:
+            # Generate a random color that works well in both light and dark modes
+            # Use HSV color space for better control
+            is_dark = self.theme.is_dark_mode if self.theme else True
+            
+            if is_dark:
+                # For dark mode: use bright, saturated colors
+                # Hue: 0-360 (full spectrum), Saturation: 0.6-1.0, Value: 0.7-1.0
+                h = random.uniform(0, 360)
+                s = random.uniform(0.6, 1.0)
+                v = random.uniform(0.7, 1.0)
+            else:
+                # For light mode: use darker, saturated colors
+                # Hue: 0-360 (full spectrum), Saturation: 0.7-1.0, Value: 0.3-0.7
+                h = random.uniform(0, 360)
+                s = random.uniform(0.7, 1.0)
+                v = random.uniform(0.3, 0.7)
+            
+            # Convert HSV to RGB
+            r, g, b = colorsys.hsv_to_rgb(h / 360.0, s, v)
+            # Convert to hex
+            hex_color = f"#{int(r * 255):02X}{int(g * 255):02X}{int(b * 255):02X}"
+            self.column_colors[column_name] = hex_color
+        
+        return self.column_colors[column_name]
     
     def _apply_color_coding(self, column_name: str, value: str, label: QLabel):
         """

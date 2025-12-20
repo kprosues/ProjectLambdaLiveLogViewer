@@ -38,6 +38,7 @@ class Theme:
         'value_error': '#FF0000',
         'value_caution': '#FFAA00',
         'value_average': '#0000FF',
+        'value_maximum': '#9C27B0',  # Purple
     }
     
     # Dark mode colors
@@ -68,6 +69,7 @@ class Theme:
         'value_error': '#F44336',
         'value_caution': '#FFC107',
         'value_average': '#64B5F6',  # Lighter blue for dark mode
+        'value_maximum': '#BA68C8',  # Lighter purple for dark mode
     }
     
     def __init__(self):

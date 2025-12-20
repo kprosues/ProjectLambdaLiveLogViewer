@@ -151,8 +151,16 @@ class MainWindow(QMainWindow):
         self.file_label = QLabel("No file selected")
         layout.addWidget(self.file_label, 1)
         
-        # Stop button
+        # Stop button - same size as file button
         self.stop_button = QPushButton("Stop Watching")
+        self.stop_button.setMinimumHeight(60)  # Same height as file button
+        self.stop_button.setStyleSheet("""
+            QPushButton {
+                font-size: 18pt;
+                font-weight: bold;
+                padding: 10px;
+            }
+        """)
         self.stop_button.clicked.connect(self._stop_watching)
         self.stop_button.setEnabled(False)
         layout.addWidget(self.stop_button)
