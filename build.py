@@ -53,9 +53,11 @@ def build_exe():
         sys.exit(1)
     
     # Run PyInstaller with the spec file
+    # Use sys.executable to ensure we use the current Python interpreter
+    # This avoids issues with virtual environments that have moved
     try:
         result = subprocess.run(
-            ['pyinstaller', 'build.spec', '--clean', '--noconfirm'],
+            [sys.executable, '-m', 'PyInstaller', 'build.spec', '--clean', '--noconfirm'],
             check=True,
             cwd=os.path.dirname(os.path.abspath(__file__))
         )
@@ -70,8 +72,8 @@ def build_exe():
         print(f"\nERROR: Build failed with exit code {e.returncode}")
         sys.exit(1)
     except FileNotFoundError:
-        print("ERROR: PyInstaller command not found.")
-        print("Please ensure PyInstaller is installed and in your PATH.")
+        print("ERROR: Python interpreter not found.")
+        print("Please ensure Python is properly installed and accessible.")
         sys.exit(1)
 
 if __name__ == "__main__":

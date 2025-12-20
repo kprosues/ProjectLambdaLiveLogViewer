@@ -121,7 +121,6 @@ a = Analysis(
         'watchdog.events',
         'csv',
         'collections',
-        'collections.defaultdict',
         'theme',
         'main_window',
         'data_display',
