@@ -165,6 +165,20 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         layout.addWidget(self.stop_button)
         
+        # Shuffle Colors button - same size as other buttons
+        self.shuffle_colors_button = QPushButton("Shuffle Colors")
+        self.shuffle_colors_button.setMinimumHeight(60)  # Same height as other buttons
+        self.shuffle_colors_button.setStyleSheet("""
+            QPushButton {
+                font-size: 18pt;
+                font-weight: bold;
+                padding: 10px;
+            }
+        """)
+        self.shuffle_colors_button.clicked.connect(self._shuffle_colors)
+        self.shuffle_colors_button.setEnabled(False)
+        layout.addWidget(self.shuffle_colors_button)
+        
         return widget
     
     def _select_file(self):
@@ -223,6 +237,7 @@ class MainWindow(QMainWindow):
             # Update UI state
             self.file_button.setEnabled(False)
             self.stop_button.setEnabled(True)
+            self.shuffle_colors_button.setEnabled(True)
             self.column_visibility_action.setEnabled(True)
             self.statusBar().showMessage(f"Watching: {file_name}")
             
@@ -289,6 +304,10 @@ class MainWindow(QMainWindow):
         """Handle column visibility changes"""
         self.data_display.set_visible_columns(visibility)
     
+    def _shuffle_colors(self):
+        """Shuffle colors for all visible columns"""
+        self.data_display.shuffle_colors()
+    
     def _adjust_title_font_size(self):
         """Show dialog to adjust title font size"""
         size, ok = QInputDialog.getInt(
@@ -337,6 +356,7 @@ class MainWindow(QMainWindow):
         self.file_label.setStyleSheet(f"color: {secondary_color}; padding: 5px;")
         self.file_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        self.shuffle_colors_button.setEnabled(False)
         self.column_visibility_action.setEnabled(False)
         self.statusBar().showMessage("Ready - No file selected")
         

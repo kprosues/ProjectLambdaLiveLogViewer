@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 # These will only be selected if they exist in the loaded datalog file
 DEFAULT_SELECTED_COLUMNS = {
     "Time",
-    "Mass Air Flow",
+    "Ignition Advance Multiplier",
     "Knock Retard",
     "Fuel Trim - Short Term",
     "Fuel Trim - Long Term",

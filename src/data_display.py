@@ -213,6 +213,24 @@ class DataDisplayWidget(QWidget):
         
         row += 1
         
+        # First, remove all data row widgets from layout that are no longer visible
+        # This prevents blank rows from appearing
+        for column_name in list(self.name_labels.keys()):
+            if column_name not in self.visible_columns:
+                # Remove from layout if present
+                if column_name in self.name_labels:
+                    self.grid_layout.removeWidget(self.name_labels[column_name])
+                if column_name in self.value_labels:
+                    self.grid_layout.removeWidget(self.value_labels[column_name])
+                if column_name in self.maximum_labels:
+                    self.grid_layout.removeWidget(self.maximum_labels[column_name])
+                # Hide the widgets
+                self.name_labels[column_name].hide()
+                if column_name in self.value_labels:
+                    self.value_labels[column_name].hide()
+                if column_name in self.maximum_labels:
+                    self.maximum_labels[column_name].hide()
+        
         # Track which columns we've processed
         processed_columns = set()
         
@@ -238,6 +256,9 @@ class DataDisplayWidget(QWidget):
                     self.grid_layout.addWidget(name_label, row, 0)
                     self.name_labels[column_name] = name_label
                 else:
+                    # Remove from old position and re-add at new position
+                    self.grid_layout.removeWidget(self.name_labels[column_name])
+                    self.grid_layout.addWidget(self.name_labels[column_name], row, 0)
                     # Update text if unit changed
                     self.name_labels[column_name].setText(label_text)
                     # Update color
@@ -252,6 +273,9 @@ class DataDisplayWidget(QWidget):
                     self.grid_layout.addWidget(value_label, row, 1)
                     self.value_labels[column_name] = value_label
                 else:
+                    # Remove from old position and re-add at new position
+                    self.grid_layout.removeWidget(self.value_labels[column_name])
+                    self.grid_layout.addWidget(self.value_labels[column_name], row, 1)
                     # Update value text
                     self.value_labels[column_name].setText(str(value))
                     # Update color
@@ -267,6 +291,9 @@ class DataDisplayWidget(QWidget):
                     self.grid_layout.addWidget(maximum_label, row, 2)
                     self.maximum_labels[column_name] = maximum_label
                 else:
+                    # Remove from old position and re-add at new position
+                    self.grid_layout.removeWidget(self.maximum_labels[column_name])
+                    self.grid_layout.addWidget(self.maximum_labels[column_name], row, 2)
                     # Update maximum value
                     self.maximum_labels[column_name].setText(maximum_value)
                     # Update color
@@ -274,15 +301,6 @@ class DataDisplayWidget(QWidget):
                     self.maximum_labels[column_name].show()
                 
                 row += 1
-        
-        # Hide columns that are no longer visible
-        for column_name in list(self.name_labels.keys()):
-            if column_name not in processed_columns:
-                self.name_labels[column_name].hide()
-                if column_name in self.value_labels:
-                    self.value_labels[column_name].hide()
-                if column_name in self.maximum_labels:
-                    self.maximum_labels[column_name].hide()
     
     def _calculate_maximum(self, column_name: str) -> str:
         """
@@ -338,6 +356,19 @@ class DataDisplayWidget(QWidget):
             self.column_colors[column_name] = hex_color
         
         return self.column_colors[column_name]
+    
+    def shuffle_colors(self):
+        """
+        Shuffle/regenerate colors for all visible columns.
+        This will assign new random colors to each visible row.
+        """
+        # Clear colors for all visible columns to force regeneration
+        for column_name in list(self.column_colors.keys()):
+            if column_name in self.visible_columns:
+                del self.column_colors[column_name]
+        
+        # Update display to regenerate colors and apply them
+        self.update_display()
     
     def _apply_color_coding(self, column_name: str, value: str, label: QLabel):
         """
